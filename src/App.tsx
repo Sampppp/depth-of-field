@@ -9,125 +9,53 @@ import {
   Flex,
   Text,
   Select,
-  Button,
   Radio,
   Stack,
   RadioGroup,
 } from "@chakra-ui/react";
 
-import PhotographyGraphic, { SUBJECTS } from "./PhotographyGraphic";
-
-import Telephoto from "./assets/100-400.png";
-import Fisheye from "./assets/fishey.png";
+import PhotographyGraphic from "./PhotographyGraphic";
 
 const CIRCLES_OF_CONFUSION: Record<
   string,
   {
-    coc: number;
+    sensorWidth: number;
     sensorHeight: number;
   }
 > = {
-  Webcam: {
-    coc: 0.002,
-    sensorHeight: 3.6,
-  },
-  Smartphone: {
-    coc: 0.002,
-    sensorHeight: 7.3,
-  },
-  "35mm (full frame)": {
-    coc: 0.029,
-    sensorHeight: 24,
-  },
-  "APS-C": {
-    coc: 0.019,
-    sensorHeight: 15.6,
-  },
   "Micro Four Thirds": {
-    coc: 0.015,
+    sensorWidth: 17.3,
     sensorHeight: 13,
   },
+  "APS-C": {
+    sensorWidth: 24,
+    sensorHeight: 16,
+  },
+  "Super 35": {
+    sensorWidth: 30,
+    sensorHeight: 21,
+  },
+  "35mm (full frame)": {
+    sensorWidth: 35,
+    sensorHeight: 24,
+  },
+  "4.5x6 (Medium Format)": {
+    sensorWidth: 60,
+    sensorHeight: 45,
+  },
   "6x6 (Medium Format)": {
-    coc: 0.02,
+    sensorWidth: 60,
     sensorHeight: 60,
   },
   "6x7 (Medium Format)": {
-    coc: 0.025,
-    sensorHeight: 70,
+    sensorWidth: 70,
+    sensorHeight: 60,
+  },
+  "6x9 (Medium Format)": {
+    sensorWidth: 90,
+    sensorHeight: 60,
   },
 };
-
-const COMMON_SETUPS: {
-  name: string;
-  focalLength: number;
-  aperture: number;
-  idealDistance: number;
-  sensor: string;
-}[] = [
-  {
-    name: "Webcam",
-    focalLength: 3.6,
-    aperture: 2.8,
-    idealDistance: 36,
-    sensor: "Webcam",
-  },
-  {
-    name: "Smartphone",
-    focalLength: 4.3,
-    aperture: 2.0,
-    idealDistance: 36,
-    sensor: "Smartphone",
-  },
-  {
-    name: "APS-C - 35mm",
-    focalLength: 35,
-    aperture: 1.8,
-    idealDistance: 72,
-    sensor: "APS-C",
-  },
-  {
-    name: "FF - 28mm",
-    focalLength: 28,
-    aperture: 1.4,
-    idealDistance: 48,
-    sensor: "35mm (full frame)",
-  },
-  {
-    name: "FF - 35mm",
-    focalLength: 35,
-    aperture: 1.4,
-    idealDistance: 60,
-    sensor: "35mm (full frame)",
-  },
-  {
-    name: "FF - 50mm",
-    focalLength: 50,
-    aperture: 1.8,
-    idealDistance: 72,
-    sensor: "35mm (full frame)",
-  },
-  {
-    name: "FF - 70mm",
-    focalLength: 70,
-    aperture: 2.8,
-    idealDistance: 96,
-    sensor: "35mm (full frame)",
-  },
-  {
-    name: "6x6 - 80mm",
-    focalLength: 80,
-    aperture: 2.8,
-    idealDistance: 90,
-    sensor: "6x6 (Medium Format)",
-  },
-  {
-    name: "6x7 - 80mm",
-    focalLength: 80,
-    aperture: 2.8,
-    idealDistance: 80,
-    sensor: "6x7 (Medium Format)",
-  },
-];
 
 const SYSTEMS = ["Metric", "Imperial"] as const;
 
@@ -140,18 +68,26 @@ function App() {
     useState(72);
   const [focalLengthInMillimeters, setFocalLengthInMillimeters] = useState(50);
   const [aperture, setAperture] = useState(1.8);
-  const [subject, setSubject] = useState("Human");
-  const [system, setSystem] = useState<(typeof SYSTEMS)[number]>("Imperial");
+  const [speedMultiplier, setSpeedMultiplier] = useState(1);
+  const effectiveFocalLength = focalLengthInMillimeters * speedMultiplier;
+  const effectiveAperture = aperture * speedMultiplier;
+  
+  const [system, setSystem] = useState<(typeof SYSTEMS)[number]>("Metric");
   const [sensor, setSensor] = useState("35mm (full frame)");
 
   const distanceToSubjectInMM = distanceToSubjectInInches * 25.4;
 
-  const circleOfConfusionInMillimeters = CIRCLES_OF_CONFUSION[sensor].coc;
+  const sensorDiagonalInMillimeters = Math.sqrt(
+    CIRCLES_OF_CONFUSION[sensor].sensorWidth * CIRCLES_OF_CONFUSION[sensor].sensorWidth +
+      CIRCLES_OF_CONFUSION[sensor].sensorHeight *
+        CIRCLES_OF_CONFUSION[sensor].sensorHeight
+  );
+  const circleOfConfusionInMillimeters = sensorDiagonalInMillimeters / 1500;
 
   const hyperFocalDistanceInMM =
-    focalLengthInMillimeters +
-    (focalLengthInMillimeters * focalLengthInMillimeters) /
-      (aperture * circleOfConfusionInMillimeters);
+    effectiveFocalLength +
+    (effectiveFocalLength * effectiveFocalLength) /
+      (effectiveAperture * circleOfConfusionInMillimeters);
   const depthOfFieldFarLimitInMM =
     (hyperFocalDistanceInMM * distanceToSubjectInMM) /
     (hyperFocalDistanceInMM -
@@ -178,13 +114,13 @@ function App() {
 
   const sensorHeight = CIRCLES_OF_CONFUSION[sensor].sensorHeight;
   const verticalFieldOfView =
-    (2 * Math.atan(sensorHeight / 2 / focalLengthInMillimeters) * 180) /
+    (2 * Math.atan(sensorHeight / 2 / effectiveFocalLength) * 180) /
     Math.PI;
 
   const labelStyles = {
     mt: "2",
     ml: "-2.5",
-    fontSize: "sm",
+    fontSize: "12",
   };
 
   const distanceMarks = useMemo(() => {
@@ -214,14 +150,14 @@ function App() {
   return (
     <>
       <Box p={2} pt={6}>
-        <PhotographyGraphic
+          <PhotographyGraphic
           distanceToSubjectInInches={distanceToSubjectInInches}
           nearFocalPointInInches={nearFocalPointInInches}
           farFocalPointInInches={farFocalPointInInches}
           farDistanceInInches={farDistanceInInches}
-          subject={subject as keyof typeof SUBJECTS}
-          focalLength={focalLengthInMillimeters}
-          aperture={aperture}
+          
+          focalLength={effectiveFocalLength}
+          aperture={effectiveAperture}
           system={system}
           verticalFieldOfView={verticalFieldOfView}
           onChangeDistance={(val) => setDistanceToSubjectInInches(val)}
@@ -311,14 +247,6 @@ function App() {
           <Flex gap={2} mt={2}>
             <Box w="20%"></Box>
             <Box flexGrow={1}>
-              <Flex justify="space-between">
-                <img src={Fisheye} alt="Fishey lens" style={{ height: 50 }} />
-                <img
-                  src={Telephoto}
-                  alt="100-400 lens"
-                  style={{ height: 50 }}
-                />
-              </Flex>
             </Box>
           </Flex>
         </Box>
@@ -333,11 +261,11 @@ function App() {
                 aria-label="aperture"
                 value={aperture}
                 onChange={(val: number) => setAperture(val)}
-                min={0.8}
+                min={0.95}
                 max={22}
                 step={0.1}
               >
-                {[0.8, 1.4, 1.8, 2.8, 4, 5.6, 8, 11, 16, 22].map((val) => (
+                {[0.95, 1.4, 1.8, 2.8, 4, 5.6, 8, 11, 16, 22].map((val) => (
                   <SliderMark key={val} value={val} {...labelStyles}>
                     {val}
                   </SliderMark>
@@ -379,21 +307,16 @@ function App() {
 
             <Flex gap={2} width="50%">
               <Box w="20%" mt={2}>
-                <Text align="right">Subject</Text>
+                <Text align="right">Speedboost/Teleconverter</Text>
               </Box>
               <Box flexGrow={1}>
                 <Select
-                  value={subject}
-                  placeholder="Subject"
-                  onChange={(evt) => {
-                    if (SUBJECTS[evt?.target?.value as keyof typeof SUBJECTS]) {
-                      setSubject(evt?.target?.value);
-                    }
-                  }}
+                  value={speedMultiplier}
+                  onChange={(e) => setSpeedMultiplier(parseFloat(e.target.value))}
                 >
-                  {Object.entries(SUBJECTS).map(([key]) => (
-                    <option key={key} value={key}>
-                      {key}
+                  {[0.71,1,1.4,1.7,2].map((val) => (
+                    <option key={val} value={val}>
+                      {val}x
                     </option>
                   ))}
                 </Select>
@@ -402,30 +325,10 @@ function App() {
           </Flex>
         </Box>
 
-        <Box p={4} pt={6}>
-          <Flex gap={5} justify="center">
-            {COMMON_SETUPS.map((setup) => (
-              <Button
-                key={setup.name}
-                onClick={() => {
-                  setFocalLengthInMillimeters(setup.focalLength);
-                  setAperture(setup.aperture);
-                  setSensor(setup.sensor);
-                  setDistanceToSubjectInInches(setup.idealDistance);
-                }}
-              >
-                {setup.name}
-              </Button>
-            ))}
-          </Flex>
-        </Box>
-
-        <Box p={4} pt={6}>
-          <Flex gap={5} justify="center">
-            <a href="https://github.com/jherr/depth-of-field" target="_blank">
-              Contribute to this open source project on GitHub.
-            </a>
-          </Flex>
+        <Box pt={6}>
+          <Text>
+            Real: {focalLengthInMillimeters}mm f/{aperture} | Effective: {effectiveFocalLength.toFixed(0)}mm f/{effectiveAperture.toFixed(1)}
+          </Text>
         </Box>
       </Box>
     </>
