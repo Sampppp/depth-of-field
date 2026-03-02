@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { toImperial, toMetric } from "./utils/units";
+import { toMetric } from "./utils/units";
 
 function findXAtY(
   x: number,
@@ -71,7 +71,6 @@ export default function PhotographyGraphic({
   farDistanceInInches,
   focalLength,
   aperture,
-  system,
   verticalFieldOfView,
   onChangeDistance,
 }: {
@@ -81,11 +80,10 @@ export default function PhotographyGraphic({
   farDistanceInInches: number;
   focalLength: number;
   aperture: number;
-  system: string;
   verticalFieldOfView: number;
   onChangeDistance?: (distance: number) => void;
 }) {
-  const convertUnits = system === "Imperial" ? toImperial : toMetric;
+  const convertUnits = toMetric;
 
   const svgRef = useRef<SVGSVGElement>(null);
   const mouseDownRef = useRef(false);

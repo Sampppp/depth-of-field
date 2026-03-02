@@ -9,9 +9,6 @@ import {
   Flex,
   Text,
   Select,
-  Radio,
-  Stack,
-  RadioGroup,
 } from "@chakra-ui/react";
 
 import PhotographyGraphic from "./PhotographyGraphic";
@@ -57,7 +54,6 @@ const CIRCLES_OF_CONFUSION: Record<
   },
 };
 
-const SYSTEMS = ["Metric", "Imperial"] as const;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -73,8 +69,7 @@ function App() {
 
   
   
-  const [system, setSystem] = useState<(typeof SYSTEMS)[number]>("Metric");
-  const [sensor, setSensor] = useState("35mm (full frame)");
+    const [sensor, setSensor] = useState("35mm (full frame)");
 
   const selectedSensorHeight = CIRCLES_OF_CONFUSION[sensor].sensorHeight;
   const fullFrameHeight = CIRCLES_OF_CONFUSION["35mm (full frame)"].sensorHeight;
@@ -131,28 +126,17 @@ function App() {
   };
 
   const distanceMarks = useMemo(() => {
-    if (system === "Imperial") {
-      return new Array(Math.floor(farDistanceInInches / 24) + 1)
-        .fill(0)
-        .map((_v, i) => (i + 1) * 24)
-        .map((val) => ({
-          value: val,
-          label: `${val / 12}'`,
-        }));
-    } else {
-      const farDistanceInMeters = farDistanceInInches * 0.0254;
-      function convertMetersToInches(meters: number) {
-        return meters * 39.3701;
-      }
-      return new Array(Math.floor(farDistanceInMeters) + 1)
-        .fill(0)
-        .map((_val, val) => ({
-          value: convertMetersToInches(val + 1),
-          label: `${val + 1}m`,
-        }));
-      return [];
+    const farDistanceInMeters = farDistanceInInches * 0.0254;
+    function convertMetersToInches(meters: number) {
+      return meters * 39.3701;
     }
-  }, [system, farDistanceInInches]);
+    return new Array(Math.floor(farDistanceInMeters) + 1)
+      .fill(0)
+      .map((_val, val) => ({
+        value: convertMetersToInches(val + 1),
+        label: `${val + 1}m`,
+      }));
+  }, [farDistanceInInches]);
 
   return (
     <>
@@ -165,41 +149,18 @@ function App() {
           
           focalLength={effectiveFocalLength}
           aperture={effectiveAperture}
-          system={system}
           verticalFieldOfView={verticalFieldOfView}
           onChangeDistance={(val) => setDistanceToSubjectInInches(val)}
         />
       </Box>
 
       <Box px={6}>
-        <Box pt={6}>
-          <Flex gap={2}>
-            <Box w="20%">
-              <Text align="right">Units</Text>
-            </Box>
-
-            <Box flexGrow={1}>
-              <RadioGroup
-                onChange={(v) => setSystem(v as "Imperial" | "Metric")}
-                value={system}
-              >
-                <Stack direction="row">
-                  {SYSTEMS.map((system) => (
-                    <Radio value={system} key={system}>
-                      {system}
-                    </Radio>
-                  ))}
-                </Stack>
-              </RadioGroup>
-            </Box>
-          </Flex>
-        </Box>
 
         <Box pt={6}>
           <Flex gap={2}>
             <Box w="20%">
               <Text align="right">
-                Subject Distance ({system === "Imperial" ? "ft" : "m"})
+                Subject Distance (m)
               </Text>
             </Box>
             <Box flexGrow={1}>
