@@ -69,11 +69,18 @@ function App() {
   const [focalLengthInMillimeters, setFocalLengthInMillimeters] = useState(50);
   const [aperture, setAperture] = useState(1.8);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
-  const effectiveFocalLength = focalLengthInMillimeters * speedMultiplier;
-  const effectiveAperture = aperture * speedMultiplier;
+
+
+  
   
   const [system, setSystem] = useState<(typeof SYSTEMS)[number]>("Metric");
   const [sensor, setSensor] = useState("35mm (full frame)");
+
+  const selectedSensorHeight = CIRCLES_OF_CONFUSION[sensor].sensorHeight;
+  const fullFrameHeight = CIRCLES_OF_CONFUSION["35mm (full frame)"].sensorHeight;
+  const cropFactor = fullFrameHeight / selectedSensorHeight;
+  const effectiveFocalLength = focalLengthInMillimeters * speedMultiplier * cropFactor;
+  const effectiveAperture = aperture * speedMultiplier;
 
   const distanceToSubjectInMM = distanceToSubjectInInches * 25.4;
 
@@ -327,7 +334,7 @@ function App() {
 
         <Box pt={6}>
           <Text>
-            Real: {focalLengthInMillimeters}mm f/{aperture} | Effective: {effectiveFocalLength.toFixed(0)}mm f/{effectiveAperture.toFixed(1)}
+            FF Native: {focalLengthInMillimeters}mm f/{aperture} | Effective: {effectiveFocalLength.toFixed(0)}mm f/{effectiveAperture.toFixed(1)}
           </Text>
         </Box>
       </Box>
