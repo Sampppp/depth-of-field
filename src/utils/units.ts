@@ -1,10 +1,11 @@
-export const toImperial = (inches: number, precision = 1) => {
-  const feet = Math.floor(inches / 12);
-  const remainingInches = inches % 12;
-  return `${feet}' ${remainingInches.toFixed(precision)}"`;
+export const toMetric = (mm: number, precision = 2): string => {
+  if (mm >= 1000) {
+    return `${(mm / 1000).toFixed(precision)} m`;
+  }
+  return `${mm.toFixed(precision)} cm`;
 };
 
-export const toMetric = (inches: number, precision = 1) => {
-  const cm = inches * 2.54;
-  return `${cm.toFixed(precision)} cm`;
+// Formats mm as meters with given precision
+export const mmToMeters = (mm: number, precision = 2): string => {
+  return `${(mm / 1000).toFixed(precision)} m`;
 };

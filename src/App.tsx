@@ -13,144 +13,104 @@ import {
 
 import PhotographyGraphic from "./PhotographyGraphic";
 
-const CIRCLES_OF_CONFUSION: Record<
-  string,
-  {
-    sensorWidth: number;
-    sensorHeight: number;
-  }
-> = {
-  "Micro Four Thirds": {
-    sensorWidth: 17.3,
-    sensorHeight: 13,
-  },
-  "APS-C": {
-    sensorWidth: 24,
-    sensorHeight: 16,
-  },
-  "Super 35": {
-    sensorWidth: 30,
-    sensorHeight: 21,
-  },
-  "35mm (full frame)": {
-    sensorWidth: 35,
-    sensorHeight: 24,
-  },
-  "4.5x6 (Medium Format)": {
-    sensorWidth: 60,
-    sensorHeight: 45,
-  },
-  "6x6 (Medium Format)": {
-    sensorWidth: 60,
-    sensorHeight: 60,
-  },
-  "6x7 (Medium Format)": {
-    sensorWidth: 70,
-    sensorHeight: 60,
-  },
-  "6x9 (Medium Format)": {
-    sensorWidth: 90,
-    sensorHeight: 60,
-  },
+// All sensor dimensions in mm
+const SENSORS: Record<string, { sensorWidth: number; sensorHeight: number }> = {
+  "Micro Four Thirds": { sensorWidth: 17.3, sensorHeight: 13 },
+  "APS-C":             { sensorWidth: 23.6, sensorHeight: 15.6 },
+  "Super 35":          { sensorWidth: 24.89, sensorHeight: 18.66 },
+  "35mm (full frame)": { sensorWidth: 36, sensorHeight: 24 },
+  "4.5x6 (Medium Format)": { sensorWidth: 56, sensorHeight: 42 },
+  "6x6 (Medium Format)":   { sensorWidth: 56, sensorHeight: 56 },
+  "6x7 (Medium Format)":   { sensorWidth: 70, sensorHeight: 56 },
+  "6x9 (Medium Format)":   { sensorWidth: 84, sensorHeight: 56 },
 };
 
+const FULL_FRAME_WIDTH = SENSORS["35mm (full frame)"].sensorWidth; // 36mm
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
 function App() {
-  const [distanceToSubjectInInches, setDistanceToSubjectInInches] =
-    useState(72);
-  const [focalLengthInMillimeters, setFocalLengthInMillimeters] = useState(50);
+  // All distances stored in mm internally
+  const [distanceToSubjectMM, setDistanceToSubjectMM] = useState(2000); // 2m
+  const [focalLengthMM, setFocalLengthMM] = useState(50);
   const [aperture, setAperture] = useState(1.8);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
+  const [sensor, setSensor] = useState("35mm (full frame)");
 
+  const { sensorWidth, sensorHeight } = SENSORS[sensor];
 
-  
-  
-    const [sensor, setSensor] = useState("35mm (full frame)");
+  // Horizontal crop factor: >1 for sensors smaller than FF, <1 for MF
+  const cropFactor = FULL_FRAME_WIDTH / sensorWidth;
 
-  const selectedSensorHeight = CIRCLES_OF_CONFUSION[sensor].sensorHeight;
-  const fullFrameHeight = CIRCLES_OF_CONFUSION["35mm (full frame)"].sensorHeight;
-  const cropFactor = fullFrameHeight / selectedSensorHeight;
-  const effectiveFocalLength = focalLengthInMillimeters * speedMultiplier * cropFactor;
+  // Speed booster/teleconverter scales the physical focal length on the mount
+  const effectiveFocalLength = focalLengthMM * speedMultiplier;
+
+  // Aperture (f-number) scales with speed multiplier: booster makes it faster
   const effectiveAperture = aperture * speedMultiplier;
 
-  const distanceToSubjectInMM = distanceToSubjectInInches * 25.4;
+  // 35mm equivalent focal length for reference only (not used in DoF calc)
+  const equivalentFocalLength = effectiveFocalLength * cropFactor;
 
-  const sensorDiagonalInMillimeters = Math.sqrt(
-    CIRCLES_OF_CONFUSION[sensor].sensorWidth * CIRCLES_OF_CONFUSION[sensor].sensorWidth +
-      CIRCLES_OF_CONFUSION[sensor].sensorHeight *
-        CIRCLES_OF_CONFUSION[sensor].sensorHeight
-  );
-  const circleOfConfusionInMillimeters = sensorDiagonalInMillimeters / 1500;
+  // CoC derived from sensor diagonal
+  const sensorDiagonal = Math.sqrt(sensorWidth ** 2 + sensorHeight ** 2);
+  const coc = sensorDiagonal / 1500; // mm
 
-  const hyperFocalDistanceInMM =
+  // Hyperfocal distance (mm)
+  // H = f + f² / (N x c)  ≈ f²/(Nxc) when f << H
+  const hyperfocalMM =
     effectiveFocalLength +
-    (effectiveFocalLength * effectiveFocalLength) /
-      (effectiveAperture * circleOfConfusionInMillimeters);
-  const depthOfFieldFarLimitInMM =
-    (hyperFocalDistanceInMM * distanceToSubjectInMM) /
-    (hyperFocalDistanceInMM -
-      (distanceToSubjectInMM - focalLengthInMillimeters));
-  const depthOfFieldNearLimitInMM =
-    (hyperFocalDistanceInMM * distanceToSubjectInMM) /
-    (hyperFocalDistanceInMM +
-      (distanceToSubjectInMM - focalLengthInMillimeters));
+    (effectiveFocalLength ** 2) / (effectiveAperture * coc);
 
-  const farDistanceInInches = 360;
-  const nearFocalPointInInches = clamp(
-    depthOfFieldNearLimitInMM / 25.4,
-    0,
-    farDistanceInInches
+  // Depth of field limits (mm)
+  // Near = H·d / (H + (d - f))
+  // Far  = H·d / (H - (d - f))
+  const dFocus = distanceToSubjectMM - effectiveFocalLength;
+  const nearLimitMM = (hyperfocalMM * distanceToSubjectMM) / (hyperfocalMM + dFocus);
+  const rawFarLimitMM = (hyperfocalMM * distanceToSubjectMM) / (hyperfocalMM - dFocus);
+
+  // Maximum displayable distance (15m)
+  const maxDisplayMM = 15000;
+  const farLimitMM = clamp(
+    rawFarLimitMM < 0 || rawFarLimitMM > maxDisplayMM ? maxDisplayMM : rawFarLimitMM,
+    nearLimitMM,
+    maxDisplayMM
   );
-  let farFocalPointInInches = clamp(
-    depthOfFieldFarLimitInMM / 25.4,
-    0,
-    farDistanceInInches
-  );
-  if (farFocalPointInInches < nearFocalPointInInches) {
-    farFocalPointInInches = farDistanceInInches;
-  }
+  const clampedNearMM = clamp(nearLimitMM, 0, maxDisplayMM);
 
-  const sensorHeight = CIRCLES_OF_CONFUSION[sensor].sensorHeight;
-  const verticalFieldOfView =
-    (2 * Math.atan(sensorHeight / 2 / effectiveFocalLength) * 180) /
-    Math.PI;
+  // Vertical FoV (degrees) — uses physical sensor height and effective focal length
+  const verticalFoV =
+    (2 * Math.atan(sensorHeight / 2 / effectiveFocalLength) * 180) / Math.PI;
 
-  const labelStyles = {
-    mt: "2",
-    ml: "-2.5",
-    fontSize: "12",
-  };
+  const labelStyles = { mt: "2", ml: "-2.5", fontSize: "12" };
 
+  // Distance slider marks every 1m, in mm
   const distanceMarks = useMemo(() => {
-    const farDistanceInMeters = farDistanceInInches * 0.0254;
-    function convertMetersToInches(meters: number) {
-      return meters * 39.3701;
-    }
-    return new Array(Math.floor(farDistanceInMeters) + 1)
-      .fill(0)
-      .map((_val, val) => ({
-        value: convertMetersToInches(val + 1),
-        label: `${val + 1}m`,
-      }));
-  }, [farDistanceInInches]);
+    const maxMeters = Math.floor(maxDisplayMM / 1000);
+    return Array.from({ length: maxMeters }, (_, i) => ({
+      value: (i + 1) * 1000,
+      label: `${i + 1}m`,
+    }));
+  }, []);
+
+  const dofMM = farLimitMM - clampedNearMM;
+  const dofDisplay = dofMM >= 1000
+    ? `${(dofMM / 1000).toFixed(2)} m`
+    : `${dofMM.toFixed(0)} mm`;
 
   return (
     <>
       <Box p={2} pt={6}>
-          <PhotographyGraphic
-          distanceToSubjectInInches={distanceToSubjectInInches}
-          nearFocalPointInInches={nearFocalPointInInches}
-          farFocalPointInInches={farFocalPointInInches}
-          farDistanceInInches={farDistanceInInches}
-          
+        <PhotographyGraphic
+          distanceToSubjectMM={distanceToSubjectMM}
+          nearLimitMM={clampedNearMM}
+          farLimitMM={farLimitMM}
+          farDistanceMM={maxDisplayMM}
           focalLength={effectiveFocalLength}
           aperture={effectiveAperture}
-          verticalFieldOfView={verticalFieldOfView}
-          onChangeDistance={(val) => setDistanceToSubjectInInches(val)}
+          verticalFieldOfView={verticalFoV}
+          onChangeDistance={(mm) => setDistanceToSubjectMM(mm)}
         />
       </Box>
 
@@ -159,27 +119,23 @@ function App() {
         <Box pt={6}>
           <Flex gap={2}>
             <Box w="20%">
-              <Text align="right">
-                Subject Distance (m)
-              </Text>
+              <Text align="right">Subject Distance</Text>
             </Box>
             <Box flexGrow={1}>
               <Slider
                 aria-label="distance to subject"
-                value={distanceToSubjectInInches}
-                onChange={(val: number) => setDistanceToSubjectInInches(val)}
-                min={10}
-                max={400}
-                step={1}
+                value={distanceToSubjectMM}
+                onChange={(val) => setDistanceToSubjectMM(val)}
+                min={200}
+                max={maxDisplayMM}
+                step={100}
               >
                 {distanceMarks.map(({ label, value }) => (
                   <SliderMark key={value} value={value} {...labelStyles}>
                     {label}
                   </SliderMark>
                 ))}
-                <SliderTrack>
-                  <SliderFilledTrack />
-                </SliderTrack>
+                <SliderTrack><SliderFilledTrack /></SliderTrack>
                 <SliderThumb />
               </Slider>
             </Box>
@@ -194,27 +150,18 @@ function App() {
             <Box flexGrow={1}>
               <Slider
                 aria-label="focal length"
-                value={focalLengthInMillimeters}
-                onChange={(val: number) => setFocalLengthInMillimeters(val)}
+                value={focalLengthMM}
+                onChange={(val) => setFocalLengthMM(val)}
                 min={3}
-                max={400}
+                max={600}
                 step={1}
               >
-                {[14, 28, 35, 50, 70, 85, 100, 135, 155, 200].map((val) => (
-                  <SliderMark key={val} value={val} {...labelStyles}>
-                    {val}
-                  </SliderMark>
+                {[14, 28, 35, 50, 85, 100, 135, 200, 300, 400, 600].map((val) => (
+                  <SliderMark key={val} value={val} {...labelStyles}>{val}</SliderMark>
                 ))}
-                <SliderTrack>
-                  <SliderFilledTrack />
-                </SliderTrack>
+                <SliderTrack><SliderFilledTrack /></SliderTrack>
                 <SliderThumb />
               </Slider>
-            </Box>
-          </Flex>
-          <Flex gap={2} mt={2}>
-            <Box w="20%"></Box>
-            <Box flexGrow={1}>
             </Box>
           </Flex>
         </Box>
@@ -222,25 +169,21 @@ function App() {
         <Box pt={6}>
           <Flex gap={2}>
             <Box w="20%">
-              <Text align="right">Aperture</Text>
+              <Text align="right">Aperture (f/)</Text>
             </Box>
             <Box flexGrow={1}>
               <Slider
                 aria-label="aperture"
                 value={aperture}
-                onChange={(val: number) => setAperture(val)}
+                onChange={(val) => setAperture(val)}
                 min={0.95}
                 max={22}
                 step={0.1}
               >
                 {[0.95, 1.4, 1.8, 2.8, 4, 5.6, 8, 11, 16, 22].map((val) => (
-                  <SliderMark key={val} value={val} {...labelStyles}>
-                    {val}
-                  </SliderMark>
+                  <SliderMark key={val} value={val} {...labelStyles}>{val}</SliderMark>
                 ))}
-                <SliderTrack>
-                  <SliderFilledTrack />
-                </SliderTrack>
+                <SliderTrack><SliderFilledTrack /></SliderTrack>
                 <SliderThumb />
               </Slider>
             </Box>
@@ -251,23 +194,15 @@ function App() {
           <Flex gap={2}>
             <Flex gap={2} width="50%">
               <Box w="20%" mt={2}>
-                <Text align="right">Sensor Size</Text>
+                <Text align="right">Sensor</Text>
               </Box>
               <Box flexGrow={1}>
                 <Select
                   value={sensor}
-                  placeholder="Sensor"
-                  onChange={(evt) => {
-                    if (!evt?.target?.value) {
-                      return;
-                    }
-                    setSensor(evt?.target?.value);
-                  }}
+                  onChange={(e) => e.target.value && setSensor(e.target.value)}
                 >
-                  {Object.entries(CIRCLES_OF_CONFUSION).map(([key]) => (
-                    <option key={key} value={key}>
-                      {key}
-                    </option>
+                  {Object.keys(SENSORS).map((key) => (
+                    <option key={key} value={key}>{key}</option>
                   ))}
                 </Select>
               </Box>
@@ -275,17 +210,15 @@ function App() {
 
             <Flex gap={2} width="50%">
               <Box w="20%" mt={2}>
-                <Text align="right">Speedboost/Teleconverter</Text>
+                <Text align="right">Speed Booster / Teleconverter</Text>
               </Box>
               <Box flexGrow={1}>
                 <Select
                   value={speedMultiplier}
                   onChange={(e) => setSpeedMultiplier(parseFloat(e.target.value))}
                 >
-                  {[0.71,1,1.4,1.7,2].map((val) => (
-                    <option key={val} value={val}>
-                      {val}x
-                    </option>
+                  {[0.58, 0.71, 1, 1.4, 1.7, 2].map((val) => (
+                    <option key={val} value={val}>{val}x</option>
                   ))}
                 </Select>
               </Box>
@@ -293,10 +226,30 @@ function App() {
           </Flex>
         </Box>
 
-        <Box pt={6}>
-          <Text>
-            FF Native: {focalLengthInMillimeters}mm f/{aperture} | Effective: {effectiveFocalLength.toFixed(0)}mm f/{effectiveAperture.toFixed(1)}
-          </Text>
+        <Box pt={4} pb={4}>
+          <Flex gap={6} wrap="wrap">
+            <Text fontSize="sm">
+              <b>Physical:</b> {focalLengthMM}mm f/{aperture}
+            </Text>
+            <Text fontSize="sm">
+              <b>Effective:</b> {effectiveFocalLength.toFixed(0)}mm f/{effectiveAperture.toFixed(1)}
+            </Text>
+            <Text fontSize="sm">
+              <b>35mm equiv:</b> {equivalentFocalLength.toFixed(0)}mm
+              {" "}(crop {cropFactor.toFixed(2)}x)
+            </Text>
+            <Text fontSize="sm">
+              <b>CoC:</b> {coc.toFixed(3)} mm
+            </Text>
+            <Text fontSize="sm">
+              <b>Hyperfocal:</b> {hyperfocalMM >= 1000
+                ? `${(hyperfocalMM / 1000).toFixed(2)} m`
+                : `${hyperfocalMM.toFixed(0)} mm`}
+            </Text>
+            <Text fontSize="sm">
+              <b>DoF:</b> {dofDisplay}
+            </Text>
+          </Flex>
         </Box>
       </Box>
     </>
