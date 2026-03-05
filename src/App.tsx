@@ -16,21 +16,26 @@ import PhotographyGraphic from "./PhotographyGraphic";
 function SensorComparison({
   sensorWidth,
   sensorHeight,
-  speedMultiplier,
+  lensCoverageDiameterMM,
 }: {
   sensorWidth: number;
   sensorHeight: number;
-  speedMultiplier: number;
+  lensCoverageDiameterMM: number;
 }) {
   const fullWidth = 36; // 35mm full frame width in mm
   const fullHeight = 24; // full frame height in mm (3:2 aspect)
 
-  // Approximate image circle radius: sensor diagonal * speedMultiplier / 2
   const sensorDiagonal = Math.sqrt(sensorWidth ** 2 + sensorHeight ** 2);
-  const imageCircleRadius = (sensorDiagonal * speedMultiplier) / 2;
+  const imageCircleRadius = lensCoverageDiameterMM / 2;
 
   // Determine viewBox size to fit everything
-  const maxDim = Math.max(fullWidth, fullHeight, sensorWidth, sensorHeight, imageCircleRadius * 2);
+  const maxDim = Math.max(
+    fullWidth,
+    fullHeight,
+    sensorWidth,
+    sensorHeight,
+    imageCircleRadius * 2
+  );
   const viewBoxSize = maxDim * 1.2; // add some padding
   const offset = viewBoxSize / 2;
 
@@ -75,11 +80,11 @@ function SensorComparison({
       {/* Diameter label */}
       <text
         x={imageCircleRadius + 2}
-        y={-2}
+        y={0}
         fontSize={2}
         fill="#00aa00"
       >
-        { (imageCircleRadius * 2).toFixed(1) } mm
+        Image circle: {lensCoverageDiameterMM.toFixed(1)} mm
       </text>
       {/* Labels */}
       <text x={-fullWidth / 2} y={-fullHeight / 2 - 2} fontSize={2} fill="#ff6600">
@@ -88,22 +93,32 @@ function SensorComparison({
       <text x={-sensorWidth / 2} y={sensorHeight / 2 + 4} fontSize={2} fill="#0066ff">
         {sensorWidth}×{sensorHeight} mm
       </text>
-      <text x={imageCircleRadius + 2} y={0} fontSize={2} fill="#00aa00">
-        Image circle (×{speedMultiplier})
-      </text>
     </svg>
   );
 }
+
 // All sensor dimensions in mm
 const SENSORS: Record<string, { sensorWidth: number; sensorHeight: number }> = {
   "Micro Four Thirds": { sensorWidth: 17.3, sensorHeight: 13 },
-  "APS-C":             { sensorWidth: 23.6, sensorHeight: 15.6 },
-  "Super 35":          { sensorWidth: 24.89, sensorHeight: 18.66 },
+  "APS-C": { sensorWidth: 23.6, sensorHeight: 15.6 },
+  "Super 35": { sensorWidth: 24.89, sensorHeight: 18.66 },
   "35mm (full frame)": { sensorWidth: 36, sensorHeight: 24 },
   "4.5x6 (Medium Format)": { sensorWidth: 56, sensorHeight: 42 },
-  "6x6 (Medium Format)":   { sensorWidth: 56, sensorHeight: 56 },
-  "6x7 (Medium Format)":   { sensorWidth: 70, sensorHeight: 56 },
-  "6x9 (Medium Format)":   { sensorWidth: 84, sensorHeight: 56 },
+  "6x6 (Medium Format)": { sensorWidth: 56, sensorHeight: 56 },
+  "6x7 (Medium Format)": { sensorWidth: 70, sensorHeight: 56 },
+  "6x9 (Medium Format)": { sensorWidth: 84, sensorHeight: 56 },
+};
+
+// Lens dimensions (used for coverage calculation)
+const LENSES: Record<string, { lensWidth: number; lensHeight: number }> = {
+  "Micro Four Thirds": { lensWidth: 17.3, lensHeight: 13 },
+  "APS-C": { lensWidth: 23.6, lensHeight: 15.6 },
+  "Super 35": { lensWidth: 24.89, lensHeight: 18.66 },
+  "35mm (full frame)": { lensWidth: 36, lensHeight: 24 },
+  "4.5x6 (Medium Format)": { lensWidth: 56, lensHeight: 42 },
+  "6x6 (Medium Format)": { lensWidth: 56, lensHeight: 56 },
+  "6x7 (Medium Format)": { lensWidth: 70, lensHeight: 56 },
+  "6x9 (Medium Format)": { lensWidth: 84, lensHeight: 56 },
 };
 
 const FULL_FRAME_WIDTH = SENSORS["35mm (full frame)"].sensorWidth; // 36mm
@@ -119,8 +134,10 @@ function App() {
   const [aperture, setAperture] = useState(1.8);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const [sensor, setSensor] = useState("35mm (full frame)");
+  const [lens, setLens] = useState("35mm (full frame)");
 
   const { sensorWidth, sensorHeight } = SENSORS[sensor];
+  const { lensWidth, lensHeight } = LENSES[lens];
 
   // Horizontal crop factor: >1 for sensors smaller than FF, <1 for MF
   const cropFactor = FULL_FRAME_WIDTH / sensorWidth;
@@ -136,6 +153,8 @@ function App() {
 
   // CoC derived from sensor diagonal
   const sensorDiagonal = Math.sqrt(sensorWidth ** 2 + sensorHeight ** 2);
+  const lensDiagonal = Math.sqrt(lensWidth ** 2 + lensHeight ** 2);
+  const lensCoverageDiameterMM = lensDiagonal * speedMultiplier;
   const coc = sensorDiagonal / 1500; // mm
 
   // Hyperfocal distance (mm)
@@ -148,13 +167,17 @@ function App() {
   // Near = H·d / (H + (d - f))
   // Far  = H·d / (H - (d - f))
   const dFocus = distanceToSubjectMM - effectiveFocalLength;
-  const nearLimitMM = (hyperfocalMM * distanceToSubjectMM) / (hyperfocalMM + dFocus);
-  const rawFarLimitMM = (hyperfocalMM * distanceToSubjectMM) / (hyperfocalMM - dFocus);
+  const nearLimitMM =
+    (hyperfocalMM * distanceToSubjectMM) / (hyperfocalMM + dFocus);
+  const rawFarLimitMM =
+    (hyperfocalMM * distanceToSubjectMM) / (hyperfocalMM - dFocus);
 
   // Maximum displayable distance (15m)
   const maxDisplayMM = 15000;
   const farLimitMM = clamp(
-    rawFarLimitMM < 0 || rawFarLimitMM > maxDisplayMM ? maxDisplayMM : rawFarLimitMM,
+    rawFarLimitMM < 0 || rawFarLimitMM > maxDisplayMM
+      ? maxDisplayMM
+      : rawFarLimitMM,
     nearLimitMM,
     maxDisplayMM
   );
@@ -162,7 +185,10 @@ function App() {
 
   // Vertical FoV (degrees) — uses physical sensor height and effective focal length
   const verticalFoV =
-    (2 * Math.atan(sensorHeight / 2 / effectiveFocalLength) * 180) / Math.PI;
+    (2 *
+      Math.atan(sensorHeight / 2 / effectiveFocalLength) *
+      180) /
+    Math.PI;
 
   const labelStyles = { mt: "2", ml: "-2.5", fontSize: "12" };
 
@@ -176,9 +202,10 @@ function App() {
   }, []);
 
   const dofMM = farLimitMM - clampedNearMM;
-  const dofDisplay = dofMM >= 1000
-    ? `${(dofMM / 1000).toFixed(2)} m`
-    : `${dofMM.toFixed(0)} mm`;
+  const dofDisplay =
+    dofMM >= 1000
+      ? `${(dofMM / 1000).toFixed(2)} m`
+      : `${dofMM.toFixed(0)} mm`;
 
   return (
     <>
@@ -196,7 +223,6 @@ function App() {
       </Box>
 
       <Box px={6}>
-
         <Box pt={6}>
           <Flex gap={2}>
             <Box w="20%">
@@ -216,7 +242,9 @@ function App() {
                     {label}
                   </SliderMark>
                 ))}
-                <SliderTrack><SliderFilledTrack /></SliderTrack>
+                <SliderTrack>
+                  <SliderFilledTrack />
+                </SliderTrack>
                 <SliderThumb />
               </Slider>
             </Box>
@@ -237,10 +265,16 @@ function App() {
                 max={600}
                 step={1}
               >
-                {[14, 28, 35, 50, 85, 100, 135, 200, 300, 400, 600].map((val) => (
-                  <SliderMark key={val} value={val} {...labelStyles}>{val}</SliderMark>
-                ))}
-                <SliderTrack><SliderFilledTrack /></SliderTrack>
+                {[14, 28, 35, 50, 85, 100, 135, 200, 300, 400, 600].map(
+                  (val) => (
+                    <SliderMark key={val} value={val} {...labelStyles}>
+                      {val}
+                    </SliderMark>
+                  )
+                )}
+                <SliderTrack>
+                  <SliderFilledTrack />
+                </SliderTrack>
                 <SliderThumb />
               </Slider>
             </Box>
@@ -262,9 +296,13 @@ function App() {
                 step={0.1}
               >
                 {[0.95, 1.4, 1.8, 2.8, 4, 5.6, 8, 11, 16, 22].map((val) => (
-                  <SliderMark key={val} value={val} {...labelStyles}>{val}</SliderMark>
+                  <SliderMark key={val} value={val} {...labelStyles}>
+                    {val}
+                  </SliderMark>
                 ))}
-                <SliderTrack><SliderFilledTrack /></SliderTrack>
+                <SliderTrack>
+                  <SliderFilledTrack />
+                </SliderTrack>
                 <SliderThumb />
               </Slider>
             </Box>
@@ -273,7 +311,8 @@ function App() {
 
         <Box pt={6}>
           <Flex gap={2}>
-            <Flex gap={2} width="50%">
+            {/* Sensor selector */}
+            <Flex gap={2} width="33%">
               <Box w="20%" mt={2}>
                 <Text align="right">Sensor</Text>
               </Box>
@@ -283,23 +322,49 @@ function App() {
                   onChange={(e) => e.target.value && setSensor(e.target.value)}
                 >
                   {Object.keys(SENSORS).map((key) => (
-                    <option key={key} value={key}>{key}</option>
+                    <option key={key} value={key}>
+                      {key}
+                    </option>
                   ))}
                 </Select>
               </Box>
             </Flex>
 
-            <Flex gap={2} width="50%">
+            {/* Lens selector */}
+            <Flex gap={2} width="33%">
+              <Box w="20%" mt={2}>
+                <Text align="right">Lens coverage</Text>
+              </Box>
+              <Box flexGrow={1}>
+                <Select
+                  value={lens}
+                  onChange={(e) => e.target.value && setLens(e.target.value)}
+                >
+                  {Object.keys(LENSES).map((key) => (
+                    <option key={key} value={key}>
+                      {key}
+                    </option>
+                  ))}
+                </Select>
+              </Box>
+            </Flex>
+
+            {/* Speed booster selector */}
+            <Flex gap={2} width="33%">
               <Box w="20%" mt={2}>
                 <Text align="right">Speed Booster / Teleconverter</Text>
               </Box>
               <Box flexGrow={1}>
                 <Select
                   value={speedMultiplier}
-                  onChange={(e) => setSpeedMultiplier(parseFloat(e.target.value))}
+                  onChange={(e) =>
+                    setSpeedMultiplier(parseFloat(e.target.value))
+                  }
                 >
                   {[0.58, 0.71, 1, 1.4, 1.7, 2].map((val) => (
-                    <option key={val} value={val}>{val}x</option>
+                    <option key={val} value={val}>
+                      {val}x
+                    </option>
                   ))}
                 </Select>
               </Box>
@@ -313,17 +378,19 @@ function App() {
               <b>Physical:</b> {focalLengthMM}mm f/{aperture}
             </Text>
             <Text fontSize="sm">
-              <b>Effective:</b> {effectiveFocalLength.toFixed(0)}mm f/{effectiveAperture.toFixed(1)}
+              <b>Effective:</b> {effectiveFocalLength.toFixed(0)}mm f/
+              {effectiveAperture.toFixed(1)}
             </Text>
             <Text fontSize="sm">
-              <b>35mm equiv:</b> {equivalentFocalLength.toFixed(0)}mm
-              {" "}(crop {cropFactor.toFixed(2)}x)
+              <b>35mm equiv:</b> {equivalentFocalLength.toFixed(0)}mm (crop{" "}
+              {cropFactor.toFixed(2)}x)
             </Text>
             <Text fontSize="sm">
               <b>CoC:</b> {coc.toFixed(3)} mm
             </Text>
             <Text fontSize="sm">
-              <b>Hyperfocal:</b> {hyperfocalMM >= 1000
+              <b>Hyperfocal:</b>{" "}
+              {hyperfocalMM >= 1000
                 ? `${(hyperfocalMM / 1000).toFixed(2)} m`
                 : `${hyperfocalMM.toFixed(0)} mm`}
             </Text>
@@ -332,11 +399,12 @@ function App() {
             </Text>
           </Flex>
         </Box>
+
         {/* Sensor comparison graphic */}
         <SensorComparison
           sensorWidth={sensorWidth}
           sensorHeight={sensorHeight}
-          speedMultiplier={speedMultiplier}
+          lensCoverageDiameterMM={lensCoverageDiameterMM}
         />
       </Box>
     </>
