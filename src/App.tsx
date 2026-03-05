@@ -13,6 +13,87 @@ import {
 
 import PhotographyGraphic from "./PhotographyGraphic";
 
+function SensorComparison({
+  sensorWidth,
+  sensorHeight,
+  speedMultiplier,
+}: {
+  sensorWidth: number;
+  sensorHeight: number;
+  speedMultiplier: number;
+}) {
+  const fullWidth = 36; // 35mm full frame width in mm
+  const fullHeight = 24; // full frame height in mm (3:2 aspect)
+
+  // Approximate image circle radius: sensor diagonal * speedMultiplier / 2
+  const sensorDiagonal = Math.sqrt(sensorWidth ** 2 + sensorHeight ** 2);
+  const imageCircleRadius = (sensorDiagonal * speedMultiplier) / 2;
+
+  // Determine viewBox size to fit everything
+  const maxDim = Math.max(fullWidth, fullHeight, sensorWidth, sensorHeight, imageCircleRadius * 2);
+  const viewBoxSize = maxDim * 1.2; // add some padding
+  const offset = viewBoxSize / 2;
+
+  return (
+    <svg
+      width="600"
+      height="400"
+      viewBox={`${-offset} ${-offset} ${viewBoxSize} ${viewBoxSize}`}
+      style={{ border: "1px solid #ccc", marginTop: "0.5rem" }}
+    >
+      {/* Full‑frame reference rectangle */}
+      <rect
+        x={-fullWidth / 2}
+        y={-fullHeight / 2}
+        width={fullWidth}
+        height={fullHeight}
+        fill="none"
+        stroke="#ff6600"
+        strokeDasharray="4,2"
+        strokeWidth={0.5}
+      />
+      {/* Selected sensor rectangle */}
+      <rect
+        x={-sensorWidth / 2}
+        y={-sensorHeight / 2}
+        width={sensorWidth}
+        height={sensorHeight}
+        fill="rgba(0,120,255,0.2)"
+        stroke="#0066ff"
+        strokeWidth={0.5}
+      />
+      {/* Image circle */}
+      <circle
+        cx={0}
+        cy={0}
+        r={imageCircleRadius}
+        fill="none"
+        stroke="#00aa00"
+        strokeDasharray="2,2"
+        strokeWidth={0.5}
+      />
+      {/* Diameter label */}
+      <text
+        x={imageCircleRadius + 2}
+        y={-2}
+        fontSize={2}
+        fill="#00aa00"
+      >
+        { (imageCircleRadius * 2).toFixed(1) } mm
+      </text>
+      {/* Labels */}
+      <text x={-fullWidth / 2} y={-fullHeight / 2 - 2} fontSize={2} fill="#ff6600">
+        35mm FF ({fullWidth}×{fullHeight} mm)
+      </text>
+      <text x={-sensorWidth / 2} y={sensorHeight / 2 + 4} fontSize={2} fill="#0066ff">
+        {sensorWidth}×{sensorHeight} mm
+      </text>
+      <text x={imageCircleRadius + 2} y={0} fontSize={2} fill="#00aa00">
+        Image circle (×{speedMultiplier})
+      </text>
+    </svg>
+  );
+}
 // All sensor dimensions in mm
 const SENSORS: Record<string, { sensorWidth: number; sensorHeight: number }> = {
   "Micro Four Thirds": { sensorWidth: 17.3, sensorHeight: 13 },
@@ -251,6 +332,12 @@ function App() {
             </Text>
           </Flex>
         </Box>
+        {/* Sensor comparison graphic */}
+        <SensorComparison
+          sensorWidth={sensorWidth}
+          sensorHeight={sensorHeight}
+          speedMultiplier={speedMultiplier}
+        />
       </Box>
     </>
   );

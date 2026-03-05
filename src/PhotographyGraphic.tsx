@@ -74,7 +74,7 @@ export default function PhotographyGraphic({
   const svgRef = useRef<SVGSVGElement>(null);
   const mouseDownRef = useRef(false);
 
-  const height = 50;
+  const height = 80;
   // Scale: SVG units = mm / scale, so farDistanceMM maps to a manageable SVG width
   // We'll work directly in mm but scale the viewBox
   const scale = farDistanceMM / 360; // normalize to ~360 SVG units wide
@@ -122,9 +122,10 @@ export default function PhotographyGraphic({
       {/* FOV cone */}
       <path d={viewPath} fill="#c8d8e8" fillOpacity={0.5} />
 
-      {/* Camera icon */}
+      {/* Camera icon 
       <rect x={-8} y={cameraY - 5} width={7} height={10} rx={1} fill="#555" />
       <rect x={-1} y={cameraY - 3} width={3} height={6} rx={1} fill="#777" />
+      */}
 
       {/* DoF region */}
       <rect
