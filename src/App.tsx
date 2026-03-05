@@ -25,7 +25,7 @@ function SensorComparison({
   const fullWidth = 36; // 35mm full frame width in mm
   const fullHeight = 24; // full frame height in mm (3:2 aspect)
 
-  const sensorDiagonal = Math.sqrt(sensorWidth ** 2 + sensorHeight ** 2);
+  // const sensorDiagonal = Math.sqrt(sensorWidth ** 2 + sensorHeight ** 2);
   const imageCircleRadius = lensCoverageDiameterMM / 2;
 
   // Determine viewBox size to fit everything
