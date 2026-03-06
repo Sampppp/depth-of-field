@@ -183,13 +183,6 @@ function App() {
   );
   const clampedNearMM = clamp(nearLimitMM, 0, maxDisplayMM);
 
-  // Vertical FoV (degrees) — uses physical sensor height and effective focal length
-  const verticalFoV =
-    (2 *
-      Math.atan(sensorHeight / 2 / effectiveFocalLength) *
-      180) /
-    Math.PI;
-
   const labelStyles = { mt: "2", ml: "-2.5", fontSize: "12" };
 
   // Distance slider marks every 1m, in mm
@@ -217,7 +210,10 @@ function App() {
           farDistanceMM={maxDisplayMM}
           focalLength={effectiveFocalLength}
           aperture={effectiveAperture}
-          verticalFieldOfView={verticalFoV}
+          sensorWidth={sensorWidth}
+          sensorHeight={sensorHeight}
+          sensorName={sensor}
+          lensCoverageDiameterMM={lensCoverageDiameterMM}
           onChangeDistance={(mm) => setDistanceToSubjectMM(mm)}
         />
       </Box>
