@@ -75,7 +75,7 @@ export default function CompressionGraphic({
   // t=1 → distortion  (wide, ratio high, blue end)
   // We map ratio from ~1 (tele extreme) to ~15 (ultra-wide extreme)
   // t increases as ratio increases (distortion direction)
-  const maxRatioForScale = 15;
+  const maxRatioForScale = 5;
   const t = Math.min((compressionRatio - 1) / (maxRatioForScale - 1), 1); // 0=compression, 1=distortion
 
   // Color: t=0 (compression) → red/warm, t=1 (distortion) → blue/cool
@@ -85,18 +85,19 @@ export default function CompressionGraphic({
   const scaleColor = `rgb(${cr},${cg},${cb})`;
 
 
-  function scaleDescription(ratio: number): { label: string; sublabel: string } {
-    // ratio is HIGH = distortion (wide/close), LOW = compression (tele/far)
-    if (ratio >= 10)  return { label: "Extreme Distortion",  sublabel: "ultra-wide or very close — severe facial geometry stretching" };
-    if (ratio >= 6)   return { label: "Strong Distortion",   sublabel: "wide angle — noticeable nose/ear size exaggeration" };
-    if (ratio >= 4)   return { label: "Mild Distortion",     sublabel: "moderate wide — slight perspective stretching" };
-    if (ratio >= 2.8) return { label: "Neutral",             sublabel: "natural perspective — minimal distortion or compression" };
-    if (ratio >= 2.0) return { label: "Mild Compression",    sublabel: "short telephoto — subtle background stacking" };
-    if (ratio >= 1.5) return { label: "Strong Compression",  sublabel: "telephoto — background appears noticeably closer" };
-    return                   { label: "Extreme Compression", sublabel: "super-telephoto — background nearly flat with subject" };
-  }
+function scaleDescription(t: number): { label: string; sublabel: string } {
+  // t is 0 (compression) → 1 (distortion), matching the scale bar position
+  // Thresholds derived from original ratio breakpoints (maxRatioForScale = 15)
+  if (t >= 0.83) return { label: "Extreme Distortion",  sublabel: "ultra-wide or very close — severe facial geometry stretching" };
+  if (t >= 0.66) return { label: "Strong Distortion",   sublabel: "wide angle — noticeable nose/ear size exaggeration" };
+  if (t >= 0.5) return { label: "Mild Distortion",     sublabel: "moderate wide — slight perspective stretching" };
+  if (t >= 0.46) return { label: "Neutral",             sublabel: "natural perspective — minimal distortion or compression" };
+  if (t >= 0.3) return { label: "Mild Compression",    sublabel: "short telephoto — subtle background stacking" };
+  if (t >= 0.16) return { label: "Strong Compression",  sublabel: "telephoto — background appears noticeably closer" };
+  return                   { label: "Extreme Compression", sublabel: "super-telephoto — background nearly flat with subject" };
+}
 
-  const { label: scaleLabel, sublabel: scaleSublabel } = scaleDescription(compressionRatio);
+  const { label: scaleLabel, sublabel: scaleSublabel } = scaleDescription(t);
 
 
   // ── Sensor display (mirrors PhotographyGraphic) ───────────────────────────
