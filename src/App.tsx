@@ -9,17 +9,19 @@ import {
   Flex,
   Text,
   Select,
-  Button,
-  ButtonGroup,
+  Switch,
 } from "@chakra-ui/react";
 
 import PhotographyGraphic from "./PhotographyGraphic";
-import CompressionPage from "./CompressionPage";
+import CompressionGraphic from "./CompressionGraphic";
 import {
   flToNorm, normToFl,
   apToNorm, normToAp,
   distToNorm, normToDist,
+  frameToNorm, normToFrame,
+  bgToNorm, normToBg,
 } from "./utils/logSlider";
+import { formatMM } from "./utils/units";
 
 // ── Sensor comparison SVG ────────────────────────────────────────────────────
 function SensorComparison({
@@ -103,20 +105,36 @@ const DIST_MARKS = [200, 500, 1000, 2000, 3000, 5000, 8000, 15000].map(v => ({
   norm: distToNorm(v),
   label: v >= 1000 ? `${v / 1000}m` : `${v}mm`,
 }));
+const FRAME_MARKS = [100, 200, 300, 600, 1000, 2000, 5000, 10000].map(v => ({
+  norm: frameToNorm(v),
+  label: v >= 1000 ? `${v / 1000}m` : `${v}mm`,
+}));
+const BG_MARKS = [1, 10, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 50000].map(v => ({
+  norm: bgToNorm(v),
+  label: v >= 1000 ? `${v / 1000}m` : `${v}mm`,
+}));
 
-type Page = "dof" | "compression";
-
-// ── App ───────────────────────────────────────────────────────────────────────
 function App() {
-  const [page, setPage] = useState<Page>("dof");
+  const [showCompression, setShowCompression] = useState(false);
+
+  // Default values for all sliders
+  const DEFAULTS = {
+    distanceToSubjectMM: 2000,
+    focalLengthMM: 50,
+    aperture: 2,
+    frameWidthMM: 500,
+    backgroundDistanceMM: 1000,
+  };
 
   // All state in real units
-  const [distanceToSubjectMM, setDistanceToSubjectMM] = useState(2000);
-  const [focalLengthMM,       setFocalLengthMM]       = useState(50);
-  const [aperture,            setAperture]             = useState(1.8);
+  const [distanceToSubjectMM, setDistanceToSubjectMM] = useState(DEFAULTS.distanceToSubjectMM);
+  const [focalLengthMM,       setFocalLengthMM]       = useState(DEFAULTS.focalLengthMM);
+  const [aperture,            setAperture]             = useState(DEFAULTS.aperture);
   const [speedMultiplier,     setSpeedMultiplier]      = useState(1);
   const [sensor,              setSensor]               = useState("35mm (full frame)");
   const [lens,                setLens]                 = useState("35mm (full frame)");
+  const [frameWidthMM,        setFrameWidthMM]        = useState(DEFAULTS.frameWidthMM);
+  const [backgroundDistanceMM, setBackgroundDistanceMM] = useState(DEFAULTS.backgroundDistanceMM);
 
   const { sensorWidth, sensorHeight } = SENSORS[sensor];
   const { lensWidth, lensHeight }     = LENSES[lens];
@@ -152,30 +170,34 @@ function App() {
     ? `${(dofMM / 1000).toFixed(2)} m`
     : `${dofMM.toFixed(0)} mm`;
 
+  // Compression mode DoF calculations
+  const camToSub = (effectiveFocalLength * frameWidthMM) / sensorWidth;
+  const dFocusComp = camToSub - effectiveFocalLength;
+  const nearComp = (hyperfocalMM * camToSub) / (hyperfocalMM + dFocusComp);
+  const rawFarComp = (hyperfocalMM * camToSub) / (hyperfocalMM - dFocusComp);
+  const farComp = clamp(
+    rawFarComp < 0 || rawFarComp > maxDisplayMM ? maxDisplayMM : rawFarComp,
+    nearComp,
+    maxDisplayMM
+  );
+  const clampedNearComp = clamp(nearComp, 0, maxDisplayMM);
+  const dofMMComp = farComp - clampedNearComp;
+  const compressionDoFDisplay = dofMMComp >= 1000
+    ? `${(dofMMComp / 1000).toFixed(2)} m`
+    : `${dofMMComp.toFixed(0)} mm`;
+
   return (
     <>
-      {/* ── Tab switcher ── */}
+      {/* ── Compression toggle ── */}
       <Box px={6} pt={4} pb={0}>
-        <ButtonGroup size="sm" isAttached variant="outline">
-          <Button
-            onClick={() => setPage("dof")}
-            colorScheme={page === "dof" ? "blue" : "gray"}
-            variant={page === "dof" ? "solid" : "outline"}
-          >
-            Depth of Field
-          </Button>
-          <Button
-            onClick={() => setPage("compression")}
-            colorScheme={page === "compression" ? "blue" : "gray"}
-            variant={page === "compression" ? "solid" : "outline"}
-          >
-            Compression
-          </Button>
-        </ButtonGroup>
+        <Flex align="center">
+          <Text mr={2}>Compression Mode</Text>
+          <Switch isChecked={showCompression} onChange={(e) => setShowCompression(e.target.checked)} />
+        </Flex>
       </Box>
 
-      {/* ── Depth of Field page ── */}
-      {page === "dof" && (
+      {/* ── Depth of Field view ── */}
+      {!showCompression && (
         <>
           <Box p={2} pt={6}>
             <PhotographyGraphic
@@ -189,7 +211,6 @@ function App() {
               sensorHeight={sensorHeight}
               sensorName={sensor}
               lensCoverageDiameterMM={lensCoverageDiameterMM}
-              onChangeDistance={(mm) => setDistanceToSubjectMM(mm)}
             />
           </Box>
 
@@ -199,17 +220,18 @@ function App() {
               <Flex gap={2}>
                 <Box w="20%"><Text align="right">Subject Distance</Text></Box>
                 <Box flexGrow={1}>
-                  <Slider
-                    aria-label="distance to subject"
-                    value={distToNorm(distanceToSubjectMM)}
-                    onChange={(n) => setDistanceToSubjectMM(normToDist(n))}
-                    min={0} max={1000} step={1}
-                  >
+<Slider
+  aria-label="distance to subject"
+  value={distToNorm(distanceToSubjectMM)}
+  onChange={(n) => setDistanceToSubjectMM(normToDist(n))}
+  onDoubleClick={() => setDistanceToSubjectMM(2000)}
+  min={0} max={1000} step={1}
+>
                     {DIST_MARKS.map(({ norm, label }) => (
                       <SliderMark key={norm} value={norm} {...labelStyles}>{label}</SliderMark>
                     ))}
                     <SliderTrack><SliderFilledTrack /></SliderTrack>
-                    <SliderThumb />
+                    <SliderThumb onDoubleClick={() => setDistanceToSubjectMM(DEFAULTS.distanceToSubjectMM)} />
                   </Slider>
                 </Box>
               </Flex>
@@ -220,17 +242,18 @@ function App() {
               <Flex gap={2}>
                 <Box w="20%"><Text align="right">Focal Length (mm)</Text></Box>
                 <Box flexGrow={1}>
-                  <Slider
-                    aria-label="focal length"
-                    value={flToNorm(focalLengthMM)}
-                    onChange={(n) => setFocalLengthMM(normToFl(n))}
-                    min={180} max={1000} step={1}
-                  >
+<Slider
+  aria-label="focal length"
+  value={flToNorm(focalLengthMM)}
+  onChange={(n) => setFocalLengthMM(normToFl(n))}
+  onDoubleClick={() => setFocalLengthMM(50)}
+  min={180} max={1000} step={1}
+>
                     {FL_MARKS.map(({ norm, label }) => (
                       <SliderMark key={norm} value={norm} {...labelStyles}>{label}</SliderMark>
                     ))}
                     <SliderTrack><SliderFilledTrack /></SliderTrack>
-                    <SliderThumb />
+                    <SliderThumb onDoubleClick={() => setFocalLengthMM(DEFAULTS.focalLengthMM)} />
                   </Slider>
                 </Box>
               </Flex>
@@ -241,17 +264,173 @@ function App() {
               <Flex gap={2}>
                 <Box w="20%"><Text align="right">Aperture (f/)</Text></Box>
                 <Box flexGrow={1}>
-                  <Slider
-                    aria-label="aperture"
-                    value={apToNorm(aperture)}
-                    onChange={(n) => setAperture(normToAp(n))}
-                    min={80} max={1000} step={1}
-                  >
+<Slider
+  aria-label="aperture"
+  value={apToNorm(aperture)}
+  onChange={(n) => setAperture(normToAp(n))}
+  onDoubleClick={() => setAperture(2)}
+  min={80} max={1000} step={1}
+>
                     {AP_MARKS.map(({ norm, label }) => (
                       <SliderMark key={norm} value={norm} {...labelStyles}>{label}</SliderMark>
                     ))}
                     <SliderTrack><SliderFilledTrack /></SliderTrack>
-                    <SliderThumb />
+                    <SliderThumb onDoubleClick={() => setAperture(DEFAULTS.aperture)} />
+                  </Slider>
+                </Box>
+              </Flex>
+            </Box>
+
+            {/* Sensor / Lens / Speed booster */}
+            <Box pt={6}>
+              <Flex gap={2}>
+                <Flex gap={2} width="33%">
+                  <Box w="20%" mt={2}><Text align="right">Sensor</Text></Box>
+                  <Box flexGrow={1}>
+                    <Select value={sensor} onChange={(e) => e.target.value && setSensor(e.target.value)}>
+                      {Object.keys(SENSORS).map(k => <option key={k} value={k}>{k}</option>)}
+                    </Select>
+                  </Box>
+                </Flex>
+                <Flex gap={2} width="33%">
+                  <Box w="20%" mt={2}><Text align="right">Lens coverage</Text></Box>
+                  <Box flexGrow={1}>
+                    <Select value={lens} onChange={(e) => e.target.value && setLens(e.target.value)}>
+                      {Object.keys(LENSES).map(k => <option key={k} value={k}>{k}</option>)}
+                    </Select>
+                  </Box>
+                </Flex>
+                <Flex gap={2} width="33%">
+                  <Box w="20%" mt={2}><Text align="right">Speed Booster / Teleconverter</Text></Box>
+                  <Box flexGrow={1}>
+                    <Select value={speedMultiplier} onChange={(e) => setSpeedMultiplier(parseFloat(e.target.value))}>
+                      {[0.58, 0.71, 1, 1.4, 1.7, 2].map(v => <option key={v} value={v}>{v}x</option>)}
+                    </Select>
+                  </Box>
+                </Flex>
+              </Flex>
+            </Box>
+
+{/* Stats */}
+            <Box pt={4} pb={4}>
+              <Flex gap={6} wrap="wrap">
+                <Text fontSize="sm"><b>Physical:</b> {focalLengthMM}mm f/{aperture.toFixed(1)}</Text>
+                <Text fontSize="sm"><b>Effective:</b> {effectiveFocalLength.toFixed(0)}mm f/{effectiveAperture.toFixed(1)}</Text>
+                <Text fontSize="sm"><b>35mm equiv:</b> {equivalentFocalLength.toFixed(0)}mm (crop {cropFactor.toFixed(2)}x)</Text>
+                <Text fontSize="sm"><b>Distance:</b> {distanceToSubjectMM >= 1000 ? `${(distanceToSubjectMM / 1000).toFixed(2)} m` : `${distanceToSubjectMM} mm`}</Text>
+                <Text fontSize="sm"><b>CoC:</b> {coc.toFixed(3)} mm</Text>
+                <Text fontSize="sm"><b>Hyperfocal:</b> {hyperfocalMM >= 1000 ? `${(hyperfocalMM / 1000).toFixed(2)} m` : `${hyperfocalMM.toFixed(0)} mm`}</Text>
+                <Text fontSize="sm"><b>DoF:</b> {dofDisplay}</Text>
+              </Flex>
+            </Box>
+
+            <SensorComparison
+              sensorWidth={sensorWidth}
+              sensorHeight={sensorHeight}
+              lensCoverageDiameterMM={lensCoverageDiameterMM}
+            />
+          </Box>
+        </>
+      )}
+
+      {/* ── Compression view ── */}
+      {showCompression && (
+        <>
+          <Box p={2} pt={6}>
+            <CompressionGraphic
+              focalLengthMM={effectiveFocalLength}
+              sensorWidth={sensorWidth}
+              sensorHeight={sensorHeight}
+              sensorName={sensor}
+              frameWidthMM={frameWidthMM}
+              backgroundDistanceMM={backgroundDistanceMM}
+              aperture={aperture}
+              lensCoverageDiameterMM={lensCoverageDiameterMM}
+            />
+          </Box>
+
+          <Box px={6}>
+            {/* Framing Width — log scale */}
+            <Box pt={6}>
+              <Flex gap={2}>
+                <Box w="20%"><Text align="right">Framing Width</Text></Box>
+                <Box flexGrow={1}>
+<Slider
+  aria-label="framing width"
+  value={frameToNorm(frameWidthMM)}
+  onChange={(n) => setFrameWidthMM(normToFrame(n))}
+  onDoubleClick={() => setFrameWidthMM(500)}
+  min={0} max={1000} step={1}
+>
+                    {FRAME_MARKS.map(({ norm, label }) => (
+                      <SliderMark key={norm} value={norm} {...labelStyles}>{label}</SliderMark>
+                    ))}
+                    <SliderTrack><SliderFilledTrack /></SliderTrack>
+                    <SliderThumb onDoubleClick={() => setFrameWidthMM(DEFAULTS.frameWidthMM)} />
+                  </Slider>
+                </Box>
+              </Flex>
+            </Box>
+
+            {/* Background Distance — log scale */}
+            <Box pt={6}>
+              <Flex gap={2}>
+                <Box w="20%"><Text align="right">Background Distance (from subject)</Text></Box>
+                <Box flexGrow={1}>
+<Slider
+  aria-label="background distance"
+  value={bgToNorm(backgroundDistanceMM)}
+  onChange={(n) => setBackgroundDistanceMM(normToBg(n))}
+  onDoubleClick={() => setBackgroundDistanceMM(1000)}
+  min={0} max={1000} step={1}
+>
+                    {BG_MARKS.map(({ norm, label }) => (
+                      <SliderMark key={norm} value={norm} {...labelStyles}>{label}</SliderMark>
+                    ))}
+                    <SliderTrack><SliderFilledTrack /></SliderTrack>
+                    <SliderThumb onDoubleClick={() => setBackgroundDistanceMM(DEFAULTS.backgroundDistanceMM)} />
+                  </Slider>
+                </Box>
+              </Flex>
+            </Box>
+
+            {/* Focal Length — log scale */}
+            <Box pt={6}>
+              <Flex gap={2}>
+                <Box w="20%"><Text align="right">Focal Length (mm)</Text></Box>
+                <Box flexGrow={1}>
+<Slider
+  aria-label="focal length"
+  value={flToNorm(focalLengthMM)}
+  onChange={(n) => setFocalLengthMM(normToFl(n))}
+  min={180} max={1000} step={1}
+>
+                    {FL_MARKS.map(({ norm, label }) => (
+                      <SliderMark key={norm} value={norm} {...labelStyles}>{label}</SliderMark>
+                    ))}
+                    <SliderTrack><SliderFilledTrack /></SliderTrack>
+                    <SliderThumb onDoubleClick={() => setFocalLengthMM(DEFAULTS.focalLengthMM)} />
+                  </Slider>
+                </Box>
+              </Flex>
+            </Box>
+
+            {/* Aperture — log₂ stop scale */}
+            <Box pt={6}>
+              <Flex gap={2}>
+                <Box w="20%"><Text align="right">Aperture (f/)</Text></Box>
+                <Box flexGrow={1}>
+<Slider
+  aria-label="aperture"
+  value={apToNorm(aperture)}
+  onChange={(n) => setAperture(normToAp(n))}
+  min={80} max={1000} step={1}
+>
+                    {AP_MARKS.map(({ norm, label }) => (
+                      <SliderMark key={norm} value={norm} {...labelStyles}>{label}</SliderMark>
+                    ))}
+                    <SliderTrack><SliderFilledTrack /></SliderTrack>
+                    <SliderThumb onDoubleClick={() => setAperture(DEFAULTS.aperture)} />
                   </Slider>
                 </Box>
               </Flex>
@@ -288,29 +467,22 @@ function App() {
             </Box>
 
             {/* Stats */}
+{/* Stats */}
             <Box pt={4} pb={4}>
               <Flex gap={6} wrap="wrap">
-                <Text fontSize="sm"><b>Physical:</b> {focalLengthMM}mm f/{aperture.toFixed(1)}</Text>
-                <Text fontSize="sm"><b>Effective:</b> {effectiveFocalLength.toFixed(0)}mm f/{effectiveAperture.toFixed(1)}</Text>
+                <Text fontSize="sm"><b>Focal length:</b> {effectiveFocalLength.toFixed(0)}mm</Text>
                 <Text fontSize="sm"><b>35mm equiv:</b> {equivalentFocalLength.toFixed(0)}mm (crop {cropFactor.toFixed(2)}x)</Text>
-                <Text fontSize="sm"><b>Distance:</b> {distanceToSubjectMM >= 1000 ? `${(distanceToSubjectMM / 1000).toFixed(2)} m` : `${distanceToSubjectMM} mm`}</Text>
-                <Text fontSize="sm"><b>CoC:</b> {coc.toFixed(3)} mm</Text>
-                <Text fontSize="sm"><b>Hyperfocal:</b> {hyperfocalMM >= 1000 ? `${(hyperfocalMM / 1000).toFixed(2)} m` : `${hyperfocalMM.toFixed(0)} mm`}</Text>
-                <Text fontSize="sm"><b>DoF:</b> {dofDisplay}</Text>
+                <Text fontSize="sm"><b>Frame width:</b> {formatMM(frameWidthMM)}</Text>
+                <Text fontSize="sm"><b>Camera → Subject:</b> {formatMM((effectiveFocalLength * frameWidthMM) / sensorWidth)}</Text>
+                <Text fontSize="sm"><b>Camera → Background:</b> {formatMM(((effectiveFocalLength * frameWidthMM) / sensorWidth) + backgroundDistanceMM)}</Text>
+                <Text fontSize="sm"><b>Compression ratio:</b> {((((effectiveFocalLength * frameWidthMM) / sensorWidth) + backgroundDistanceMM) / ((effectiveFocalLength * frameWidthMM) / sensorWidth)).toFixed(3)}×</Text>
+              <Text fontSize="sm"><b>Hyperfocal:</b> {hyperfocalMM >= 1000 ? `${(hyperfocalMM/1000).toFixed(2)} m` : `${hyperfocalMM.toFixed(0)} mm`}</Text>
+              <Text fontSize="sm"><b>DoF:</b> {compressionDoFDisplay}</Text>
               </Flex>
             </Box>
-
-            <SensorComparison
-              sensorWidth={sensorWidth}
-              sensorHeight={sensorHeight}
-              lensCoverageDiameterMM={lensCoverageDiameterMM}
-            />
           </Box>
         </>
       )}
-
-      {/* ── Compression page ── */}
-      {page === "compression" && <CompressionPage />}
     </>
   );
 }

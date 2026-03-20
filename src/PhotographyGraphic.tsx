@@ -69,7 +69,6 @@ export default function PhotographyGraphic({
   sensorHeight,
   sensorName,
   lensCoverageDiameterMM,
-  onChangeDistance,
 }: {
   distanceToSubjectMM: number;
   nearLimitMM: number;
@@ -82,11 +81,8 @@ export default function PhotographyGraphic({
   sensorName: string;
   /** Lens image circle diameter in mm */
   lensCoverageDiameterMM: number;
-  onChangeDistance?: (distanceMM: number) => void;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const mouseDownRef = useRef(false);
-
   // --- Scale: sensor oriented on its side ---
   // sensorWidth spans vertically (the face the cone emerges from).
   // sensorHeight is the horizontal depth of the rect.
@@ -102,17 +98,17 @@ export default function PhotographyGraphic({
 
   // SVG canvas — tall enough to contain the cone even if it exceeds sensor bounds
   const svgHeight = Math.max(sensorDisplayFaceHeight * 4, lensRadiusSVG * 2 * 1.4);
-  const centerY   = svgHeight / 2;
+  const centerY = svgHeight / 2;
 
   // Sensor rect: depth runs left→right, face runs top→bottom
-  const sensorLeft   = 0;
-  const sensorRight  = sensorDisplayFaceWidth;
-  const sensorTop    = centerY - sensorDisplayFaceHeight / 2;
+  const sensorLeft = 0;
+  const sensorRight = sensorDisplayFaceWidth;
+  const sensorTop = centerY - sensorDisplayFaceHeight / 2;
 
   // Cone origin = right edge of sensor, but cone half-height = lens coverage radius
-  const coneOriginX  = sensorRight;
-  const coneTopY     = centerY - lensRadiusSVG;
-  const coneBotY     = centerY + lensRadiusSVG;
+  const coneOriginX = sensorRight;
+  const coneTopY = centerY - lensRadiusSVG;
+  const coneBotY = centerY + lensRadiusSVG;
 
   // Half-angle from lens coverage: atan(coverageRadius / focalLength)
   // Both in mm, so ratio is correct regardless of SVG scale.
@@ -121,8 +117,8 @@ export default function PhotographyGraphic({
   // FoV angles based on lens coverage (what the lens actually captures)
   const coverageFoVDeg = 2 * Math.atan((lensCoverageDiameterMM / 2) / focalLength) * (180 / Math.PI);
   // FoV angles that land on the sensor (what the sensor records)
-  const horizontalFoVDeg = 2 * Math.atan(sensorWidth  / 2 / focalLength) * (180 / Math.PI);
-  const verticalFoVDeg   = 2 * Math.atan(sensorHeight / 2 / focalLength) * (180 / Math.PI);
+  const horizontalFoVDeg = 2 * Math.atan(sensorWidth / 2 / focalLength) * (180 / Math.PI);
+  const verticalFoVDeg = 2 * Math.atan(sensorHeight / 2 / focalLength) * (180 / Math.PI);
 
   // --- Scene X scaling ---
   const sceneWidthSVG = 280;
@@ -131,10 +127,10 @@ export default function PhotographyGraphic({
     return sensorRight + mm * scaleX;
   }
 
-  const svgFar     = toSVGx(farDistanceMM);
+  const svgFar = toSVGx(farDistanceMM);
   const svgSubject = toSVGx(distanceToSubjectMM);
-  const svgNear    = toSVGx(nearLimitMM);
-  const svgFarDof  = toSVGx(farLimitMM);
+  const svgNear = toSVGx(nearLimitMM);
+  const svgFarDof = toSVGx(farLimitMM);
 
   const viewPath = buildViewPath(
     coneOriginX, coneTopY, coneBotY,
@@ -143,18 +139,7 @@ export default function PhotographyGraphic({
     0, svgHeight
   );
 
-  function onMouseDown() { mouseDownRef.current = true; }
-  function onMouseUp()   { mouseDownRef.current = false; }
-  function onMouseMove(evt: React.MouseEvent<SVGSVGElement>) {
-    if (!mouseDownRef.current || !svgRef.current) return;
-    const pt = svgRef.current.createSVGPoint();
-    pt.x = evt.clientX;
-    const cursorpt = pt.matrixTransform(svgRef.current.getScreenCTM()!.inverse());
-    const distMM = Math.max(200, Math.min(farDistanceMM, (cursorpt.x - sensorRight) / scaleX));
-    onChangeDistance?.(distMM);
-  }
-
-  const dofSpanSVG     = svgFarDof - svgNear;
+  const dofSpanSVG = svgFarDof - svgNear;
   const showEdgeLabels = dofSpanSVG > sceneWidthSVG * 0.05;
 
   const labelPad = 14;
@@ -163,18 +148,14 @@ export default function PhotographyGraphic({
   const viewBoxW = svgFar - viewBoxX + 6;
 
   // Does the image circle over-cover or under-cover the sensor?
-  const sensorDiagonal      = Math.sqrt(sensorWidth ** 2 + sensorHeight ** 2);
+  const sensorDiagonal = Math.sqrt(sensorWidth ** 2 + sensorHeight ** 2);
   const circleCoverssSensor = lensCoverageDiameterMM >= sensorDiagonal;
 
   return (
     <svg
       ref={svgRef}
-      onMouseDown={onMouseDown}
-      onMouseUp={onMouseUp}
-      onMouseMove={onMouseMove}
       xmlns="http://www.w3.org/2000/svg"
       viewBox={`${viewBoxX} ${-labelPad} ${viewBoxW} ${svgHeight + labelPad + rulerPad}`}
-      style={{ width: "100%", height: "auto", cursor: "ew-resize" }}
     >
       {/* ── FOV cone (lens image circle coverage) ── */}
       <path d={viewPath} fill="#c8d8e8" fillOpacity={0.5} />
@@ -182,7 +163,7 @@ export default function PhotographyGraphic({
       {/* ── DoF region ── */}
       <rect x={svgNear} y={0} width={dofSpanSVG} height={svgHeight}
         fill="#e05555" fillOpacity={0.15} />
-      <line x1={svgNear}   y1={0} x2={svgNear}   y2={svgHeight}
+      <line x1={svgNear} y1={0} x2={svgNear} y2={svgHeight}
         stroke="#c44" strokeWidth={0.3} strokeDasharray="1.5,1.5" />
       <line x1={svgFarDof} y1={0} x2={svgFarDof} y2={svgHeight}
         stroke="#c44" strokeWidth={0.3} strokeDasharray="1.5,1.5" />
@@ -246,9 +227,9 @@ export default function PhotographyGraphic({
       </text>
 
       {/* ── Ruler below ── */}
-      <line x1={svgNear}   y1={svgHeight + 6} x2={svgNear}   y2={svgHeight + 9} stroke="#888" strokeWidth={0.25} />
+      <line x1={svgNear} y1={svgHeight + 6} x2={svgNear} y2={svgHeight + 9} stroke="#888" strokeWidth={0.25} />
       <line x1={svgFarDof} y1={svgHeight + 6} x2={svgFarDof} y2={svgHeight + 9} stroke="#888" strokeWidth={0.25} />
-      <line x1={svgNear}   y1={svgHeight + 7.5} x2={svgFarDof} y2={svgHeight + 7.5} stroke="#888" strokeWidth={0.25} />
+      <line x1={svgNear} y1={svgHeight + 7.5} x2={svgFarDof} y2={svgHeight + 7.5} stroke="#888" strokeWidth={0.25} />
 
       <text
         x={svgNear + dofSpanSVG / 2} y={svgHeight + 12}

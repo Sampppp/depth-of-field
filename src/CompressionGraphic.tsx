@@ -49,6 +49,8 @@ export interface CompressionGraphicProps {
   sensorName: string;
   frameWidthMM: number;
   backgroundDistanceMM: number;
+  aperture: number;
+  lensCoverageDiameterMM: number;   // shared with PhotographyGraphic
 }
 
 export default function CompressionGraphic({
@@ -58,17 +60,24 @@ export default function CompressionGraphic({
   sensorName,
   frameWidthMM,
   backgroundDistanceMM,
+  aperture,
+  lensCoverageDiameterMM,
 }: CompressionGraphicProps) {
 
   // ── Physics ────────────────────────────────────────────────────────────────
   const cameraToSubjectMM    = (focalLengthMM * frameWidthMM) / sensorWidth;
+  // Depth‑of‑Field calculations (same as PhotographyGraphic)
+  const sensorDiagonal = Math.sqrt(sensorWidth ** 2 + sensorHeight ** 2);
+  const coc = sensorDiagonal / 1500;
+  const hyperfocalMM = focalLengthMM + (focalLengthMM ** 2) / (aperture * coc);
+  // const distanceToSubjectMM = cameraToSubjectMM; // not needed for compression graphic
   const cameraToBackgroundMM = cameraToSubjectMM + backgroundDistanceMM;
   // ratio: high (wide/close) → distortion; low (tele/far) → compression
   const compressionRatio = cameraToBackgroundMM / cameraToSubjectMM;
 
-  const halfAngleRad     = Math.atan((sensorWidth / 2) / focalLengthMM);
-  const horizontalFoVDeg = 2 * halfAngleRad * (180 / Math.PI);
-  const verticalFoVDeg   = 2 * Math.atan((sensorHeight / 2) / focalLengthMM) * (180 / Math.PI);
+  // Lens coverage bracket color logic (same as PhotographyGraphic)
+  const circleCoverssSensor = lensCoverageDiameterMM >= sensorDiagonal;
+
 
   // ── Scale direction (CORRECTED) ────────────────────────────────────────────
   // t=0 → compression (tele, ratio close to 1, red end)
@@ -105,22 +114,46 @@ function scaleDescription(t: number): { label: string; sublabel: string } {
   const mmPerSVG                = sensorWidth / sensorDisplayFaceHeight;
   const toSVGmm                 = (mm: number) => mm / mmPerSVG;
   const sensorDisplayFaceWidth  = toSVGmm(sensorHeight);
-
   const svgHeight = sensorDisplayFaceHeight * 4;
   const centerY   = svgHeight / 2;
+  // Compute lens radius and cone geometry (same as PhotographyGraphic)
+  const lensRadiusSVG = toSVGmm(lensCoverageDiameterMM / 2);
+  const coneTopY    = centerY - lensRadiusSVG;
+  const coneBotY    = centerY + lensRadiusSVG;
+  const halfAngleRad = Math.atan((lensCoverageDiameterMM / 2) / focalLengthMM);
+  const horizontalFoVDeg = 2 * halfAngleRad * (180 / Math.PI);
+  const verticalFoVDeg   = 2 * Math.atan((sensorHeight / 2) / focalLengthMM) * (180 / Math.PI);
+
+
   const sensorLeft  = 0;
   const sensorRight = sensorDisplayFaceWidth;
   const sensorTop   = centerY - sensorDisplayFaceHeight / 2;
+  // Helper clamp (same as PhotographyGraphic)
+  const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
   const coneOriginX = sensorRight;
-  const coneTopY    = centerY - sensorDisplayFaceHeight / 2;
-  const coneBotY    = centerY + sensorDisplayFaceHeight / 2;
+  // coneTopY and coneBotY are now defined above using lensRadiusSVG
 
   // ── Scene X scaling ────────────────────────────────────────────────────────
   const sceneWidthSVG = 280;
   const totalSceneMM  = cameraToBackgroundMM * 1.1;
   const scaleX        = sceneWidthSVG / totalSceneMM;
   const toSVGx        = (mm: number) => sensorRight + mm * scaleX;
+
+  // DoF calculations (same as PhotographyGraphic)
+  const maxDisplayMM = 15000;
+  const dFocus = cameraToSubjectMM - focalLengthMM;
+  const nearLimitMM = (hyperfocalMM * cameraToSubjectMM) / (hyperfocalMM + dFocus);
+  const rawFarMM = (hyperfocalMM * cameraToSubjectMM) / (hyperfocalMM - dFocus);
+  const farLimitMM = clamp(
+    rawFarMM < 0 || rawFarMM > maxDisplayMM ? maxDisplayMM : rawFarMM,
+    nearLimitMM,
+    maxDisplayMM
+  );
+  const clampedNearMM = clamp(nearLimitMM, 0, maxDisplayMM);
+  const svgNear = toSVGx(clampedNearMM);
+  const svgFarDof = toSVGx(farLimitMM);
+  const dofSpanSVG = svgFarDof - svgNear;
 
   const svgFar     = toSVGx(totalSceneMM);
   const svgSubject = toSVGx(cameraToSubjectMM);
@@ -185,6 +218,14 @@ function scaleDescription(t: number): { label: string; sublabel: string } {
       {/* ── FOV cone ── */}
       <path d={viewPath} fill="#c8d8e8" fillOpacity={0.5} />
 
+      {/* DoF region overlay */}
+      <rect x={svgNear} y={0} width={dofSpanSVG} height={svgHeight}
+        fill="#e05555" fillOpacity={0.15} />
+      <line x1={svgNear} y1={0} x2={svgNear} y2={svgHeight}
+        stroke="#c44" strokeWidth={0.3} strokeDasharray="1.5,1.5" />
+      <line x1={svgFarDof} y1={0} x2={svgFarDof} y2={svgHeight}
+        stroke="#c44" strokeWidth={0.3} strokeDasharray="1.5,1.5" />
+
       {/* ── Sensor rectangle ── */}
       <rect x={sensorLeft} y={sensorTop}
         width={sensorDisplayFaceWidth} height={sensorDisplayFaceHeight}
@@ -195,9 +236,12 @@ function scaleDescription(t: number): { label: string; sublabel: string } {
         fontSize={2.4} textAnchor="middle" fill="#1a6aff">{sensorWidth}×{sensorHeight} mm</text>
 
       {/* ── Lens bracket ── */}
-      <line x1={coneOriginX - 1} y1={coneTopY} x2={coneOriginX + 1} y2={coneTopY} stroke="#22aa55" strokeWidth={0.5} />
-      <line x1={coneOriginX - 1} y1={coneBotY} x2={coneOriginX + 1} y2={coneBotY} stroke="#22aa55" strokeWidth={0.5} />
-      <line x1={coneOriginX} y1={coneTopY} x2={coneOriginX} y2={coneBotY} stroke="#22aa55" strokeWidth={0.4} strokeDasharray="1.5,1" />
+      <line x1={coneOriginX - 1} y1={coneTopY} x2={coneOriginX + 1} y2={coneTopY}
+        stroke={circleCoverssSensor ? "#22aa55" : "#e07700"} strokeWidth={0.5} />
+      <line x1={coneOriginX - 1} y1={coneBotY} x2={coneOriginX + 1} y2={coneBotY}
+        stroke={circleCoverssSensor ? "#22aa55" : "#e07700"} strokeWidth={0.5} />
+      <line x1={coneOriginX} y1={coneTopY} x2={coneOriginX} y2={coneBotY}
+        stroke={circleCoverssSensor ? "#22aa55" : "#e07700"} strokeWidth={0.4} strokeDasharray="1.5,1" />
 
       {/* FoV annotation */}
       <text x={coneOriginX + 10} y={coneTopY - 1.5} fontSize={2.4} textAnchor="start" fill="#3a7aaa">
